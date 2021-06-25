@@ -34,6 +34,13 @@ inductive conclusion : Form_occ → Link → Prop
 | tensor {A B i j k} : conclusion (A ⊗ B,k) (Link.tensor i j k A B)
 | par {A B i j k}    : conclusion (A ⅋ B,k) (Link.par i j k A B)
 
+
+inductive mem_Link (Ai : Form_occ) (l : Link) : Prop
+| prem : premise Ai l → mem_Link
+| con : conclusion Ai l → mem_Link
+
+instance : has_mem Form_occ Link := ⟨mem_Link⟩
+
 inductive valid_link : Link → Prop
 | ax  (i j A) : valid_link (Link.ax i j A)
 | cut (i j A) : valid_link (Link.cut i j A)
@@ -48,8 +55,7 @@ structure proof_structure : Type :=
 (con_unique : ∀ Ai : Form_occ, ∀ l₁ l₂ ∈ links, conclusion Ai l₁ → conclusion Ai l₂ → l₁ = l₂)
 
 inductive mem_Form_occ_ps (Ai : Form_occ) (ps : proof_structure) : Prop
-| prem (l) : l ∈ ps.links → premise Ai l → mem_Form_occ_ps
-| con (l) : l ∈ ps.links → conclusion Ai l → mem_Form_occ_ps
+| mk {l} : l ∈ ps.links → Ai ∈ l → mem_Form_occ_ps
 
 instance : has_mem Form_occ proof_structure := ⟨mem_Form_occ_ps⟩
 
@@ -349,23 +355,17 @@ section
   lemma mem_ps_of_steps_prev {ps : proof_structure} {d : dir} :
     Δ ∈ ps.links → steps T Δ (Ai,d) X → Ai ∈ ps :=
   begin
-    intros hΔ s,
-    cases d,
-    -- down
-    case bool.ff : { apply mem_Form_occ_ps.prem Δ hΔ, exact prem_of_steps_down s }, 
-    -- up
-    case bool.tt : { apply mem_Form_occ_ps.con Δ hΔ, exact con_of_steps_up s }, 
+    intros hΔ s, cases d,
+    case bool.ff : { exact ⟨hΔ, mem_Link.prem $ prem_of_steps_down s⟩, }, 
+    case bool.tt : { exact ⟨hΔ, mem_Link.con $ con_of_steps_up s⟩, }, 
   end
 
   lemma mem_ps_of_steps_next {ps : proof_structure} {d : dir} :
     Δ ∈ ps.links → steps T Δ X (Bi,d) → Bi ∈ ps :=
   begin
-    intros hΔ s,
-    cases d,
-    -- down
-    case bool.ff : { apply mem_Form_occ_ps.con Δ hΔ, exact con_of_steps_down s }, 
-    -- up
-    case bool.tt : { apply mem_Form_occ_ps.prem Δ hΔ, exact prem_of_steps_up s }, 
+    intros hΔ s, cases d,
+    case bool.ff : { exact ⟨hΔ, mem_Link.con $ con_of_steps_down s⟩, }, 
+    case bool.tt : { exact ⟨hΔ, mem_Link.prem $ prem_of_steps_up s⟩, }, 
   end
 
 end
