@@ -12,6 +12,11 @@ inductive proof : sequent → Type
 | par {A B} {Γ Γ'}         : proof (Γ ++ [A,B] ++ Γ') → proof (Γ ++ [A ⅋ B] ++ Γ')
 | ex {A B} {Γ Γ'}          : proof (Γ ++ [A,B] ++ Γ') → proof (Γ ++ [B,A] ++ Γ')
 
+
+inductive ps_conclusion (A : Form) (ai : ℕ) (ps : proof_structure) : Prop
+| notprem : (∀ l ∈ ps.links, ¬ premise (A,ai) l) → ps_conclusion
+| con : Link.con ai A ∈ ps.links → ps_conclusion 
+
 def ps_ax (A : Form) (pi ni : ℕ) : proof_structure :=
 ⟨ {Link.ax pi ni A, Link.con pi A, Link.con ni (~A)},
   begin rintros _ ⟨_|_⟩, constructor, cases H with H H, rw H, constructor, cases H, constructor end,
@@ -32,8 +37,8 @@ def ps.disjoint (ps₁ ps₂ : proof_structure) : Prop := ∀ Ai : Form_occ, (Ai
 
 def ps_tensor (A B) (ai bi ci : ℕ) (psA psB : proof_structure) :
   ps.disjoint psA psB →
-  Link.con ai A ∈ psA.links →
-  Link.con bi B ∈ psB.links →
+  ps_conclusion A ai psA →
+  ps_conclusion B bi psB →
   (A ⊗ B, ci) ∉ psA →
   (A ⊗ B, ci) ∉ psB →
   proof_structure :=
@@ -88,8 +93,8 @@ lemma ps_tensor_conclusions {A B ai bi ci psA psB dAB conA conB hcA hcB} :
 
 def ps_cut (A : Form) (pi ni : ℕ) (psA psnA : proof_structure) :
   ps.disjoint psA psnA →
-  Link.con pi A ∈ psA.links →
-  Link.con ni (~A) ∈ psnA.links →
+  ps_conclusion A pi psA →
+  ps_conclusion (~A) ni psnA →
   proof_structure :=
 λ dAnA conA connA,
 ⟨{Link.cut pi ni A} ∪ (psA.links \ {Link.con pi A}) ∪ (psnA.links \ {Link.con ni (~A)}),
@@ -136,8 +141,8 @@ end
 
 def ps_par (A B) (ai bi ci : ℕ) (ps : proof_structure) :
   (A,ai) ≠ (B,bi) →
-  Link.con ai A ∈ ps.links →
-  Link.con bi B ∈ ps.links →
+  ps_conclusion A ai psA →
+  ps_conclusion B bi psB →
   (A ⅋ B, ci) ∉ ps →
   proof_structure :=
 λ nAB conA conB hcA,
@@ -169,10 +174,6 @@ def ps_par (A B) (ai bi ci : ℕ) (ps : proof_structure) :
       { intros pl₁ pl₂, cases H with h₁ h₂, cases H_1 with u₁ u₂, exact ps.con_unique Ai _ _ h₁ u₁ pl₁ pl₂, },
   end
 ⟩
-
-inductive ps_conclusion (A : Form) (ai : ℕ) (ps : proof_structure) : Prop
-| notprem : (∀ l ∈ ps.links, ¬ premise (A,ai) l) → ps_conclusion
-| con : Link.con ai A ∈ ps.links → ps_conclusion
 
 def proof_structure.open (ps : proof_structure) (Γ : sequent) : Prop := ∀ A ∈ Γ, ∃ i : ℕ, ps_conclusion A i ps
 
@@ -221,7 +222,15 @@ begin
   case Link.con : ai A { rintro ⟨_⟩ }
 end
 
-def relabel (ps : proof_structure) (f : ℕ → ℕ) (hf : function.injective f) : proof_structure :=
+lemma relabel_mem {Δ f A i} (hf : function.injective f) : (A,i) ∈ (relabel_Link f Δ) → ∃ j, f j = i ∧ (A,j) ∈ Δ :=
+begin
+  intro h, cases h with h h,
+  rcases (relabel_premise hf h) with ⟨j, ⟨fji,pΔ⟩⟩, refine ⟨j,fji,mem_Link.prem pΔ⟩,
+  rcases (relabel_conclusion hf h) with ⟨j, ⟨fji,pΔ⟩⟩, refine ⟨j,fji,mem_Link.con pΔ⟩,
+end
+
+
+def proof_structure.relabel (ps : proof_structure) (f : ℕ → ℕ) (hf : function.injective f) : proof_structure :=
 ⟨set.image (relabel_Link f) ps.links,
   by rintros l ⟨l', ⟨hl',⟨_⟩⟩⟩; exact relabel_valid hf (ps.valid l' hl'),
 begin
@@ -244,6 +253,39 @@ begin
   exact ps.con_unique (A,j) _ _ hk₁ hk₂ u₁ u₂
 end⟩
 
+-- lemma mem_relabel {ps : proof_structure} {f hf Δ} : Δ ∈ (ps.relabel f hf).links → ∃ Δ', Δ' = relabel_Link f Δ ∧ Δ' ∈ ps.links :=
+-- begin
+
+-- end
+
+lemma ps_conclusion_relabel {ps A i f} (hf : function.injective f) : ps_conclusion A i ps → ps_conclusion A (f i) (ps.relabel f hf) :=
+begin
+  intro h,
+  cases h with h h,
+  left,
+    rintros Δ ⟨Δ',hΔ',⟨_⟩⟩,
+    intro e,
+    apply h Δ' hΔ',
+    rcases relabel_premise hf e with ⟨i',fi',h⟩,
+    convert h, apply hf fi'.symm,
+  right,
+  refine ⟨Link.con i A,h,rfl⟩,
+end
+
+
+def separators {α β} (f g : α → β) : Prop := ∀ x y, f x ≠ g y
+
+lemma sep_even_odd : separators (λ x, 2 * x) (λ x, 2 * x + 1) :=
+  λ x y, nat.two_mul_ne_two_mul_add_one
+
+def disjoint_of_separators {ps₁ ps₂ : proof_structure} {f g} (hf hg) : separators f g → ps.disjoint (ps₁.relabel f hf) (ps₂.relabel g hg) :=
+begin
+  rintros s ⟨A,i⟩ ⟨⟨Δ₁,⟨Δ₁', hΔ₁', ⟨_⟩⟩,h₁⟩,⟨Δ₂,⟨Δ₂', hΔ₂', ⟨_⟩⟩,h₂⟩⟩,
+  rcases (relabel_mem hf h₁) with ⟨j₁,hfg,h₁⟩,
+  rcases (relabel_mem hg h₂) with ⟨j₂,⟨_⟩,h₂⟩,
+  exact s j₁ j₂ hfg,
+end
+
 def net : Π Γ, proof Γ → ∃ ps : proof_structure, ps.open Γ :=
 begin
   intros Γ π,
@@ -259,7 +301,14 @@ begin
     cases h₁ with pi h₁,
     cases h₂ with ni h₂,
     constructor, swap,
-    apply ps_cut,
+    apply ps_cut A ((λ x, 2 * x) pi) ((λ x, 2 * x + 1) ni) (psA.relabel (λ x, 2 * x) _) (psnA.relabel (λ x, 2 * x + 1) _),
+    apply disjoint_of_separators _ _ sep_even_odd,
+    apply ps_conclusion_relabel _ h₁,
+    apply ps_conclusion_relabel _ h₂,
+    { intros x y, simp,},
+    { intros x y, simp,},
+    intros A,
+    simp,
     repeat {sorry},
    },
    repeat {sorry},
