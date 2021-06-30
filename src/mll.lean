@@ -15,7 +15,6 @@ inductive Link : Type
 | cut : ℕ → ℕ → Form → Link
 | tensor : ℕ → ℕ → ℕ → Form → Form → Link
 | par : ℕ → ℕ → ℕ → Form → Form → Link
-| con : ℕ → Form → Link
 
 def Form_occ := Form × ℕ
 
@@ -26,14 +25,12 @@ inductive premise : Form_occ → Link → Prop
 | tensor_right {A B i j k} : premise (B,j) (Link.tensor i j k A B)
 | par_left {A B i j k}     : premise (A,i) (Link.par i j k A B)
 | par_right {A B i j k}    : premise (B,j) (Link.par i j k A B)
-| con {A i}                : premise (A,i) (Link.con i A)
 
 inductive conclusion : Form_occ → Link → Prop
 | ax_pos {A i j}     : conclusion (A,i) (Link.ax i j A)
 | ax_neg {A i j}     : conclusion (~A,j) (Link.ax i j A)
 | tensor {A B i j k} : conclusion (A ⊗ B,k) (Link.tensor i j k A B)
 | par {A B i j k}    : conclusion (A ⅋ B,k) (Link.par i j k A B)
-
 
 inductive mem_Link (Ai : Form_occ) (l : Link) : Prop
 | prem : premise Ai l → mem_Link
@@ -42,11 +39,10 @@ inductive mem_Link (Ai : Form_occ) (l : Link) : Prop
 instance : has_mem Form_occ Link := ⟨mem_Link⟩
 
 inductive valid_link : Link → Prop
-| ax  (i j A) : valid_link (Link.ax i j A)
-| cut (i j A) : valid_link (Link.cut i j A)
-| con (i A) : valid_link (Link.con i A)
-| tensor (i j k A B) : (A,i) ≠ (B,j) → valid_link (Link.tensor i j k A B)
-| par (i j k A B) : (A,i) ≠ (B,j) → valid_link (Link.par i j k A B)
+| ax  {i j A} : valid_link (Link.ax i j A)
+| cut {i j A} : valid_link (Link.cut i j A)
+| tensor {i j k A B} : (A,i) ≠ (B,j) → valid_link (Link.tensor i j k A B)
+| par {i j k A B} : (A,i) ≠ (B,j) → valid_link (Link.par i j k A B)
 
 structure proof_structure : Type :=
 (links : set Link)
@@ -100,7 +96,6 @@ inductive dual (A : Form) (ai ni : ℕ) : Form_occ → Form_occ → Prop
 inductive steps (T : switch) : Link → Form_occ × dir → Form_occ × dir → Prop
 | ax  {A ai ni Bi Ci} : dual A ai ni Bi Ci → steps (Link.ax ai ni A) Bi↑ Ci↓
 | cut {A ai ni Bi Ci} : dual A ai ni Bi Ci → steps (Link.cut ai ni A) Bi↓ Ci↑
-| con {A ai}          : steps (Link.con ai A) (A, ai)↓ (A,ai)↑
 | tensor {A B ai bi ci X Y} :
   T.flip steps_tensor (A, ai) (B, bi) (A ⊗ B, ci) X Y →
   steps (Link.tensor ai bi ci A B) X Y
@@ -111,6 +106,10 @@ inductive steps (T : switch) : Link → Form_occ × dir → Form_occ × dir → 
 inductive trip (ps : proof_structure) (S : switching) : ℕ → Form_occ × dir → Form_occ × dir → Prop
 | single {Ai d}    : Ai ∈ ps → trip 0 (Ai,d) (Ai,d)
 | cons {X Y Z Δ n} : Δ ∈ ps.links → steps (S Δ) Δ X Y → trip n Y Z → trip (n.succ) X Z
+
+inductive journey (ps : proof_structure) (S : switching) : ℕ → Form_occ × dir → Form_occ × dir → Type
+| trip {n X Y} : trip ps S n X Y → journey 0 X Y
+| chain {Ai n m X Z} : (∀ Δ ∈ ps.links, ¬premise Ai Δ) → trip ps S n X Ai↓ → journey m Ai↑ Z → journey m.succ X Z 
 
 inductive trip2 (ps : proof_structure) (S : switching) : Form_occ × dir → Form_occ × dir → Prop
 | single (Ai : Form_occ) (d : dir) : Ai ∈ ps → trip2 (Ai,d) (Ai,d)
@@ -237,9 +236,8 @@ section
       rcases s₂ with _ | ⟨_,_,_,Di,_,d₂⟩,
       rw dual_unique_prev d₂ d₁
     },
-    case steps.con : A ai { cases s₂, refl },
     case steps.tensor : A B ai bi ci X y t₁ {
-      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
+      rcases s₂ with _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
       cases T; simp at t₁ t₂;
       apply steps_tensor_unique_prev _ _ _ t₁ t₂;
       cases hΔ, finish,
@@ -254,7 +252,7 @@ section
       exact not_self_sub_right_tensor e1,
     },
     case steps.par : A B ai bi ci X y p₁ {
-      rcases s₂ with _ | _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
+      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
       cases T; simp at p₁ p₂;
       apply steps_par_unique_prev _ _ _ p₁ p₂;
       cases hΔ, finish,
@@ -281,9 +279,8 @@ section
       rcases s₂ with _ | ⟨_,_,_,Di,_,d₂⟩,
       rw dual_unique_next d₂ d₁
     },
-    case steps.con : A ai { cases s₂, refl },
     case steps.tensor : A B ai bi ci X y t₁ {
-      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
+      rcases s₂ with _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
       cases T; simp at t₁ t₂;
       apply steps_tensor_unique_next _ _ _ t₁ t₂;
       cases hΔ, finish,
@@ -298,7 +295,7 @@ section
       exact not_self_sub_right_tensor e1,
     },
     case steps.par : A B ai bi ci X y p₁ {
-      rcases s₂ with _ | _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
+      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
       cases T; simp at p₁ p₂;
       apply steps_par_unique_next _ _ _ p₁ p₂;
       cases hΔ, finish,
@@ -329,8 +326,7 @@ section
     intros s, cases s,
     case steps.cut : A i j Ai Bi u { cases u; constructor, },
     case steps.tensor : A B i j k Ci u { cases T; cases u; constructor },
-    case steps.par : A B i j k Ci u { cases T; cases u; constructor },
-    case steps.con : { constructor }
+    case steps.par : A B i j k Ci u { cases T; cases u; constructor }
   end
 
   lemma con_of_steps_down :
@@ -348,8 +344,7 @@ section
     intros s, cases s,
     case steps.cut : A i j Ai Bi u { cases u; constructor, },
     case steps.tensor : A B i j k Ci u { cases T; cases u; constructor },
-    case steps.par : A B i j k Ci u { cases T; cases u; constructor },
-    case steps.con : { constructor }
+    case steps.par : A B i j k Ci u { cases T; cases u; constructor }
   end
 
   lemma mem_ps_of_steps_prev {ps : proof_structure} {d : dir} :
@@ -397,20 +392,20 @@ section
   def trip.rcons {Δ} : Δ ∈ ps.links → trip ps S n X Y → steps (S Δ) Δ Y Z → trip ps S n.succ X Z :=
   begin
     revert X Y Z,
-    induction n,
-    case nat.zero : {
-      rintros X Y Z hΔ ⟨Ai,d,hA⟩ s,
-      apply trip.cons hΔ s,
-      cases Z with Ci d',
+    apply nat.strong_induction_on n,
+    intros n ih,
+    rintros X Y Z hΔ tXY sYZ,
+    cases tXY,
+    case trip.single : Ai d hA { 
+      apply trip.cons hΔ sYZ,
+      cases Z with Ci d', simp,
       apply trip.single,
-      apply mem_ps_of_steps_next hΔ s,
+      apply mem_ps_of_steps_next hΔ sYZ,
     },
-    case nat.succ : n ih {
-      rintros X Y Z hΔ tXY sYZ,
-      cases tXY with _ _ _ _ W _ Δ' _ hΔ' sXW tWY,
-      apply trip.cons hΔ' sXW,
-      apply ih hΔ tWY sYZ,
-    },
+    case trip.cons : _ W _ Δ' k hΔ' sXW tWY {
+      apply trip.cons hΔ' sXW, simp,
+      apply ih k (lt_add_one k) hΔ tWY sYZ },
+    
   end
 
   def trip.concat : trip ps S n X Y → trip ps S m Y Z → trip ps S (n + m) X Z :=
