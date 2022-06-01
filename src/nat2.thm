@@ -1,0 +1,22 @@
+Welcome to Abella 2.0.2
+Abella < Kind nat type.
+
+Abella < Type z nat.
+
+Abella < Type s nat -> nat.
+
+Abella < Define even : nat -> prop by 
+even z;
+even (s (s N)) := even N.
+
+Abella < Define odd : nat -> prop by 
+odd (s z);
+odd (s (s N)) := odd N.
+
+Abella < Theorem even_odd : 
+forall n, even n -> odd (s n).
+
+============================
+ forall n, even n -> odd (s n)
+
+even_odd < 

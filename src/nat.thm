@@ -1,0 +1,47 @@
+Kind nat type.
+Type z nat.
+Type s nat -> nat.
+
+Define is_nat : nat -> prop by
+  is_nat z ;
+  is_nat (s N) := is_nat N.
+
+Define even : nat -> prop by
+  even z ;
+  even (s (s N)) := even N.
+
+Define odd : nat -> prop by
+  odd (s z) ;
+  odd (s (s N)) := odd N.
+
+Theorem even_odd : forall n, even n -> odd (s n).
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem even_nat : forall n, even n -> is_nat n.
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem odd_nat : forall n, odd n -> is_nat n.
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem odd_even : forall n, odd n -> even (s n).
+induction on 1. intros. case H1. search. apply IH to H2. search.
+
+Theorem nat_part : forall n, is_nat n -> even n \/ odd n. 
+induction on 1. intros. case H1.
+  left. search.
+apply IH to H2. case H3.
+  right. apply even_odd to H4. search.
+  left. apply odd_even to H4. search.
+
+Theorem zero_not_odd : odd z -> false.
+intros. case H1.
+
+Theorem even_odd_split : forall n, even n -> odd n -> false.
+induction on 1. intros. case H1.
+  case H2.
+case H2.
+apply IH to H3 H4.
+
+Define plus : nat -> nat -> nat -> prop by
+  plus z N N ;
+  plus (s M) N (s K) := plus M N K.
