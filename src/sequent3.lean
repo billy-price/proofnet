@@ -1,20 +1,30 @@
 import mll
 
-def sequent := list Form
+def sequent := list Form_occ
 
 instance : has_append sequent := ⟨list.append⟩
-instance : has_mem Form sequent := ⟨list.mem⟩
+instance : has_mem Form_occ sequent := ⟨list.mem⟩
 
 inductive proof : sequent → Type
-| ax (A)                   : proof [~A, A]
-| cut (A) {Γ Γ' Δ Δ'}      : proof (Γ ++ [A] ++ Γ') → proof (Δ ++ [~A] ++ Δ') → proof (Γ++Γ'++Δ++Δ')
-| tensor {A B} {Γ Γ' Δ Δ'} : proof (Γ ++ [A] ++ Γ') → proof (Δ ++ [B] ++ Δ') → proof (Γ++Γ'++ [A ⊗ B] ++Δ++Δ') 
-| par {A B} {Γ Γ'}         : proof (Γ ++ [A,B] ++ Γ') → proof (Γ ++ [A ⅋ B] ++ Γ')
-| ex {A B} {Γ Γ'}          : proof (Γ ++ [A,B] ++ Γ') → proof (Γ ++ [B,A] ++ Γ')
+| ax {A pi ni}                   : proof [(~A,pi), (A,ni)]
+| cut (A) {i j} {Γ Γ' Δ Δ'}      : proof (Γ ++ [(A,i)] ++ Γ') → proof (Δ ++ [(~A,j)] ++ Δ') → proof (Γ++Γ'++Δ++Δ')
+| tensor {A B ai bi ci} {Γ Γ' Δ Δ'} : proof (Γ ++ [(A,ai)] ++ Γ') → proof (Δ ++ [(B,bi)] ++ Δ') → proof (Γ++Γ'++ [(A ⊗ B,ci)] ++Δ++Δ') 
+| par {A B ai bi ci} {Γ Γ'}         : proof (Γ ++ [(A,ai),(B,bi)] ++ Γ') → proof (Γ ++ [(A ⅋ B,ci)] ++ Γ')
+| ex {Ai Bi} {Γ Γ'}          : proof (Γ ++ [Ai,Bi] ++ Γ') → proof (Γ ++ [Bi,Ai] ++ Γ')
+
+def mem_Form_occ_proof {Γ : sequent} : Form_occ → proof Γ → Prop :=
+begin
+  intros Ai π,
+  induction π,
+  case proof.ax : A pi ni { exact Ai = (A,pi)  }
+  
+end
+
+instance {Γ : sequent} : has_mem Form_occ (proof Γ) := ⟨∃ Γ⟩
 
 inductive proof_net : sequent → Type
 | mk {Γ : sequent} (ps : proof_structure) : (Π A ∈ Γ, { i : ℕ // (A,i) ∈ ps ∧ ∀ Δ ∈ ps.links, ¬premise (A,i) Δ }) → proof_net Γ
-
+ 
 instance {Γ : sequent} : has_coe (proof_net Γ) proof_structure := ⟨by rintro ⟨Γ,ps,_⟩; exact ps⟩
 
 def relabel_Link (f : ℕ → ℕ) : Link → Link

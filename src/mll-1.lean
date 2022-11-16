@@ -1,58 +1,63 @@
 import tactic
 
-def Atom := ℕ
+inductive Form : Type
+| atom : ℕ → Form
+| tensor : Form → Form → Form
+| par : Form → Form → Form
+| neg : Form → Form
 
-inductive FormO : Type
-| pos : Atom × ℕ → FormO
-| neg : Atom × ℕ → FormO
-| tensor : FormO → FormO → FormO
-| par : FormO → FormO → FormO
-
-def FormO.negation : FormO → FormO
-| (FormO.pos A) := FormO.neg A
-| (FormO.neg A) := FormO.pos A
-| (FormO.tensor A B) := FormO.par (FormO.negation A) (FormO.negation B)
-| (FormO.par A B) := FormO.tensor (FormO.negation A) (FormO.negation B)
-
-infix ` ⊗ `:70 := FormO.tensor
-infix ` ⅋ `:65 := FormO.par
-prefix `~` := FormO.negation
+infix ` ⊗ `:70 := Form.tensor
+infix ` ⅋ `:65 := Form.par
+prefix `~` := Form.neg
 
 inductive Link : Type
-| ax : Atom × ℕ → Link
-| cut : FormO → Link
-| tensor : FormO → FormO → Link
-| par : FormO → FormO → Link
+| ax : ℕ → ℕ → Form → Link
+| cut : ℕ → ℕ → Form → Link
+| tensor : ℕ → ℕ → ℕ → Form → Form → Link
+| par : ℕ → ℕ → ℕ → Form → Form → Link
+| con : ℕ → Form → Link
 
-inductive premise : FormO → Link → Prop
-| cut_pos {Ai}         : premise Ai (Link.cut Ai)
-| cut_neg {Ai}         : premise (~Ai) (Link.cut Ai)
-| tensor_left {Ai Bj}  : premise Ai (Link.tensor Ai Bj)
-| tensor_right {Ai Bj} : premise Bj (Link.tensor Ai Bj)
-| par_left {Ai Bj}     : premise Ai (Link.par Ai Bj)
-| par_right {Ai Bj}    : premise Bj (Link.par Ai Bj)
+def Form_occ := Form × ℕ
 
-inductive conclusion : FormO → Link → Prop
-| ax_pos {A i}   : conclusion (FormO.pos (A,i)) (Link.ax (A,i))
-| ax_neg {A i}   : conclusion (FormO.neg (A,i)) (Link.ax (A,i))
-| tensor {Ai Bi} : conclusion (Ai ⊗ Bi) (Link.tensor Ai Bi)
-| par {Ai Bi}    : conclusion (Ai ⊗ Bi) (Link.par Ai Bi)
+inductive premise : Form_occ → Link → Prop
+| cut_pos {A i j}          : premise (A,i) (Link.cut i j A)
+| cut_neg {A i j}          : premise (~A,j) (Link.cut i j A)
+| tensor_left {A B i j k}  : premise (A,i) (Link.tensor i j k A B)
+| tensor_right {A B i j k} : premise (B,j) (Link.tensor i j k A B)
+| par_left {A B i j k}     : premise (A,i) (Link.par i j k A B)
+| par_right {A B i j k}    : premise (B,j) (Link.par i j k A B)
+| con {A i}                : premise (A,i) (Link.con i A)
 
-inductive mem_Link (Ai : FormO) (l : Link) : Prop
+inductive conclusion : Form_occ → Link → Prop
+| ax_pos {A i j}     : conclusion (A,i) (Link.ax i j A)
+| ax_neg {A i j}     : conclusion (~A,j) (Link.ax i j A)
+| tensor {A B i j k} : conclusion (A ⊗ B,k) (Link.tensor i j k A B)
+| par {A B i j k}    : conclusion (A ⅋ B,k) (Link.par i j k A B)
+
+
+inductive mem_Link (Ai : Form_occ) (l : Link) : Prop
 | prem : premise Ai l → mem_Link
 | con : conclusion Ai l → mem_Link
 
-instance : has_mem FormO Link := ⟨mem_Link⟩
+instance : has_mem Form_occ Link := ⟨mem_Link⟩
+
+inductive valid_link : Link → Prop
+| ax  (i j A) : valid_link (Link.ax i j A)
+| cut (i j A) : valid_link (Link.cut i j A)
+| con (i A) : valid_link (Link.con i A)
+| tensor (i j k A B) : (A,i) ≠ (B,j) → valid_link (Link.tensor i j k A B)
+| par (i j k A B) : (A,i) ≠ (B,j) → valid_link (Link.par i j k A B)
 
 structure proof_structure : Type :=
 (links : set Link)
-(prem_unique : ∀ Ai : FormO, ∀ l₁ l₂ ∈ links, premise Ai l₁ → premise Ai l₂ → l₁ = l₂)
-(con_unique : ∀ Ai : FormO, ∀ l₁ l₂ ∈ links, conclusion Ai l₁ → conclusion Ai l₂ → l₁ = l₂)
+(valid : ∀ l ∈ links, valid_link l)
+(prem_unique : ∀ Ai : Form_occ, ∀ l₁ l₂ ∈ links, premise Ai l₁ → premise Ai l₂ → l₁ = l₂)
+(con_unique : ∀ Ai : Form_occ, ∀ l₁ l₂ ∈ links, conclusion Ai l₁ → conclusion Ai l₂ → l₁ = l₂)
 
-inductive mem_FormO_ps (Ai : FormO) (ps : proof_structure) : Prop
-| mk {l} : l ∈ ps.links → Ai ∈ l → mem_FormO_ps
+inductive mem_Form_occ_ps (Ai : Form_occ) (ps : proof_structure) : Prop
+| mk {l} : l ∈ ps.links → Ai ∈ l → mem_Form_occ_ps
 
-instance : has_mem FormO proof_structure := ⟨mem_FormO_ps⟩
+instance : has_mem Form_occ proof_structure := ⟨mem_Form_occ_ps⟩
 
 @[reducible]
 def dir := bool
@@ -60,8 +65,8 @@ def dir := bool
 @[pattern] def down := ff
 @[pattern] def up := tt
 
-@[pattern] def with_down (Ai : FormO) := (Ai,down)
-@[pattern] def with_up (Ai : FormO) := (Ai,up)
+@[pattern] def with_down (Ai : Form_occ) := (Ai,down)
+@[pattern] def with_up (Ai : Form_occ) := (Ai,up)
 postfix `↓`:max_plus := with_down
 postfix `↑`:max_plus := with_up
 
@@ -78,91 +83,108 @@ def switch.flip {α β} (f : α → α → β) : switch → α → α → β
 | L a b := f a b
 | R a b := f b a
 
-inductive steps_tensor (Ai Bi : FormO) : FormO × dir → FormO × dir → Prop
-| down : steps_tensor Ai↓ (Ai ⊗ Bi)↓
+inductive steps_tensor (Ai Bi Ci : Form_occ) : Form_occ × dir → Form_occ × dir → Prop
+| down : steps_tensor Ai↓ Ci↓
 | turn : steps_tensor Bi↓ Ai↑
-| up : steps_tensor (Ai ⊗ Bi)↑ Bi↑
+| up : steps_tensor Ci↑ Bi↑
 
-inductive steps_par (Ai Bi : FormO) : FormO × dir → FormO × dir → Prop
-| down : steps_par Ai↓ (Ai ⅋ Bi)↓
+inductive steps_par (Ai Bi Ci : Form_occ) : Form_occ × dir → Form_occ × dir → Prop
+| down : steps_par Ai↓ Ci↓
 | turn : steps_par Bi↓ Bi↑
-| up : steps_par (Ai ⅋ Bi)↑ Ai↑
+| up : steps_par Ci↑ Ai↑
 
-inductive steps (T : switch) : Link → FormO × dir → FormO × dir → Prop
-| ax_pos  {ai} : steps (Link.ax ai) (FormO.pos ai)↑ (FormO.neg ai)↓
-| ax_neg  {ai} : steps (Link.ax ai) (FormO.neg ai)↑ (FormO.pos ai)↓
-| cut_pos  {Ai} : steps (Link.cut Ai) Ai↓ (~Ai)↑
-| cut_neg  {Ai} : steps (Link.cut Ai) (~Ai)↓ Ai↑
-| tensor {Ai Bi X Y} :
-  T.flip steps_tensor Ai Bi X Y →
-  steps (Link.tensor Ai Bi) X Y
-| par {Ai Bi X Y} :
-  T.flip steps_par Ai Bi X Y →
-  steps (Link.par Ai Bi) X Y
+inductive dual (A : Form) (ai ni : ℕ) : Form_occ → Form_occ → Prop
+| posneg : dual (A,ai) (~A,ni)
+| negpos : dual (~A,ni) (A,ai)
 
-inductive trip (ps : proof_structure) (S : switching) : ℕ → FormO × dir → FormO × dir → Prop
+inductive steps (T : switch) : Link → Form_occ × dir → Form_occ × dir → Prop
+| ax  {A ai ni Bi Ci} : dual A ai ni Bi Ci → steps (Link.ax ai ni A) Bi↑ Ci↓
+| cut {A ai ni Bi Ci} : dual A ai ni Bi Ci → steps (Link.cut ai ni A) Bi↓ Ci↑
+| con {A ai}          : steps (Link.con ai A) (A, ai)↓ (A,ai)↑
+| tensor {A B ai bi ci X Y} :
+  T.flip steps_tensor (A, ai) (B, bi) (A ⊗ B, ci) X Y →
+  steps (Link.tensor ai bi ci A B) X Y
+| par {A B ai bi ci X Y} :
+  T.flip steps_par (A, ai) (B, bi) (A ⅋ B, ci) X Y →
+  steps (Link.par ai bi ci A B) X Y
+
+inductive trip (ps : proof_structure) (S : switching) : ℕ → Form_occ × dir → Form_occ × dir → Prop
 | single {Ai d}    : Ai ∈ ps → trip 0 (Ai,d) (Ai,d)
 | cons {X Y Z Δ n} : Δ ∈ ps.links → steps (S Δ) Δ X Y → trip n Y Z → trip (n.succ) X Z
 
-inductive journey (ps : proof_structure) (S : switching) : ℕ → FormO × dir → FormO × dir → Type
-| trip {n X Y} : trip ps S n X Y → journey 0 X Y
-| chain {Ai n m X Z} : (∀ Δ ∈ ps.links, ¬premise Ai Δ) → trip ps S n X Ai↓ → journey m Ai↑ Z → journey m.succ X Z 
-
-inductive trip2 (ps : proof_structure) (S : switching) : FormO × dir → FormO × dir → Prop
-| single (Ai : FormO) (d : dir) : Ai ∈ ps → trip2 (Ai,d) (Ai,d)
-| front (Ai Bi Ci : FormO) (d₁ d₂ d₃ : dir) (Δ : Link) :
+inductive trip2 (ps : proof_structure) (S : switching) : Form_occ × dir → Form_occ × dir → Prop
+| single (Ai : Form_occ) (d : dir) : Ai ∈ ps → trip2 (Ai,d) (Ai,d)
+| front (Ai Bi Ci : Form_occ) (d₁ d₂ d₃ : dir) (Δ : Link) :
   Δ ∈ ps.links → steps (S Δ) Δ (Ai,d₁) (Bi,d₂) → trip2 (Bi,d₂) (Ci, d₃) → trip2 (Ai,d₁) (Ci,d₃)
-| back (Ai Bi Ci : FormO) (d₁ d₂ d₃ : dir) (Δ : Link) :
+| back (Ai Bi Ci : Form_occ) (d₁ d₂ d₃ : dir) (Δ : Link) :
   Δ ∈ ps.links → steps (S Δ) Δ (Bi,d₂) (Ci,d₃) → trip2 (Ai,d₁) (Bi, d₂) → trip2 (Ai,d₁) (Ci,d₃)
 
-inductive list_trip (ps : proof_structure) (S : switching) : list (FormO × dir) → Prop
+inductive list_trip (ps : proof_structure) (S : switching) : list (Form_occ × dir) → Prop
 | emp : list_trip []
-| single (Ai : FormO) (d : dir) : Ai ∈ ps → list_trip [(Ai,d)]
-| cons (Ai Bi : FormO) (d₁ d₂ : dir) (Γ : list (FormO × dir)) (Δ : Link) :
+| single (Ai : Form_occ) (d : dir) : Ai ∈ ps → list_trip [(Ai,d)]
+| cons (Ai Bi : Form_occ) (d₁ d₂ : dir) (Γ : list (Form_occ × dir)) (Δ : Link) :
   Δ ∈ ps.links → steps (S Δ) Δ (Ai,d₁) (Bi,d₂) → list_trip ((Bi,d₂) :: Γ) → list_trip ((Ai,d₁) :: (Bi,d₂) :: Γ)
 
-lemma not_self_dual {Ai} : (~Ai) ≠ Ai :=
-  by induction Ai; rintro ⟨_⟩
-
-lemma not_self_sub_left_tensor {Ai Bi} : Ai ≠ Ai ⊗ Bi :=
+lemma not_self_dual {A} : (~A) ≠ A :=
 begin
   intro e,
-  apply_fun FormO.sizeof at e,
+  apply_fun Form.sizeof at e,
+  refine ne_of_gt _ e,
+  rw [Form.sizeof, nat.add_comm], exact nat.lt_succ_self _ ,
+end
+
+lemma not_self_double_dual {A} : (~~A) ≠ A :=
+begin
+  suffices : A ≠ (~~A), by symmetry; assumption,
+  intro e,
+  apply_fun Form.sizeof at e,
   refine ne_of_lt _ e,
-  rw [FormO.sizeof, nat.add_comm],
+  refine lt_trans _ _, exact (~A).sizeof,
+  rw [Form.sizeof, nat.add_comm], exact nat.lt_succ_self _ ,
+  rw [Form.sizeof, Form.sizeof], apply add_lt_add_left,
+  have : sizeof (~A) = (~A).sizeof, refl, rw this,
+  rw [Form.sizeof, nat.add_comm], exact nat.lt_succ_self _ ,
+end
+
+lemma not_self_sub_left_tensor {A B} : A ≠ A ⊗ B :=
+begin
+  intro e,
+  apply_fun Form.sizeof at e,
+  refine ne_of_lt _ e,
+  rw [Form.sizeof, nat.add_comm],
   apply nat.lt_of_succ_le,
   rw nat.add_comm, rw nat.add_comm 1,
   apply nat.le_add_right,
 end
 
-lemma not_self_sub_right_tensor {Ai Bi} : Bi ≠ Ai ⊗ Bi :=
+lemma not_self_sub_right_tensor {A B} : B ≠ A ⊗ B :=
 begin
   intro e,
-  apply_fun FormO.sizeof at e,
+  apply_fun Form.sizeof at e,
   refine ne_of_lt _ e,
-  rw [FormO.sizeof, nat.add_comm],
+  rw [Form.sizeof, nat.add_comm],
   apply nat.lt_of_succ_le,
   rw [←nat.add_assoc],
   apply nat.le_add_right,
 end
 
-lemma not_self_sub_left_par {Ai Bi} : Ai ≠ Ai ⅋ Bi :=
+lemma not_self_sub_left_par {A B} : A ≠ A ⅋ B :=
 begin
   intro e,
-  apply_fun FormO.sizeof at e,
+  apply_fun Form.sizeof at e,
   refine ne_of_lt _ e,
-  rw [FormO.sizeof, nat.add_comm],
+  rw [Form.sizeof, nat.add_comm],
   apply nat.lt_of_succ_le,
   rw nat.add_comm, rw nat.add_comm 1,
   apply nat.le_add_right,
 end
 
-lemma not_self_sub_right_par {Ai Bi} : Bi ≠ Ai ⅋ Bi :=
+lemma not_self_sub_right_par {A B} : B ≠ A ⅋ B :=
 begin
   intro e,
-  apply_fun FormO.sizeof at e,
+  apply_fun Form.sizeof at e,
   refine ne_of_lt _ e,
-  rw [FormO.sizeof, nat.add_comm],
+  rw [Form.sizeof, nat.add_comm],
   apply nat.lt_of_succ_le,
   rw [←nat.add_assoc],
   apply nat.le_add_right,
@@ -171,71 +193,55 @@ end
 section
   variable {Δ : Link}
   variable {T : switch}
-  variables {Ai Bi Ci : FormO}
-  variables {X Y Z : FormO × dir}
+  variables {Ai Bi Ci : Form_occ}
+  variables {X Y Z : Form_occ × dir}
 
-  lemma steps_tensor_unique_prev : Ai ≠ Bi → steps_tensor Ai Bi X Z → steps_tensor Ai Bi Y Z → X = Y :=
+  lemma dual_unique_prev {A pi ni} :
+    dual A pi ni Ai Ci → dual A pi ni Bi Ci → Ai = Bi :=
   begin
-    intros nAB s₁ s₂,
-    generalize_hyp e₁ : Z = Z' at s₂,
-    cases s₁;
-    cases s₂;
-    try {refl};
-    try { cases e₁, apply absurd rfl nAB};
-    try {generalize_hyp e₃ : Ai ⊗ Bi = AiBi at e₁, cases e₁ },
+    intros d₁ d₂,
+    generalize_hyp e : Ci = Ci' at d₂,
+    cases d₁; cases d₂; injection e with e1 e2; cases e2;
+    try { cases e1 }; [refl, cases not_self_dual e1, cases not_self_dual e1.symm, refl]
   end
 
-  lemma steps_tensor_unique_next : Ai ≠ Bi → steps_tensor Ai Bi X Y → steps_tensor Ai Bi X Z → Y = Z :=
+  lemma dual_unique_next {A pi ni} :
+    dual A pi ni Ai Bi → dual A pi ni Ai Ci → Bi = Ci :=
   begin
-    intros nAB s₁ s₂,
-    generalize_hyp e₁ : X = X' at s₂,
-    cases s₁;
-    cases s₂;
-    try {refl};
-    try { cases e₁, apply absurd rfl nAB};
-    try {generalize_hyp e₃ : Ai ⊗ Bi = AiBi at e₁, cases e₁ },
+    intros d₁ d₂,
+    generalize_hyp e : Ai = Ai' at d₂,
+    cases d₁; cases d₂; injection e with e1 e2; cases e2;
+    try { cases e1 }; [refl, cases not_self_dual e1.symm, cases not_self_dual e1, refl]
   end
 
-  lemma steps_par_unique_prev : Ai ≠ Bi → steps_par Ai Bi X Z → steps_par Ai Bi Y Z → X = Y :=
-  begin
-    intros nAB s₁ s₂,
-    generalize_hyp e₁ : Z = Z' at s₂,
-    cases s₁;
-    cases s₂;
-    try {refl};
-    try { cases e₁, apply absurd rfl nAB};
-    try {generalize_hyp e₃ : Ai ⅋ Bi = AiBi at e₁, cases e₁ },
-  end
+  lemma steps_tensor_unique_prev : Ai ≠ Bi → Bi ≠ Ci → Ai ≠ Ci → steps_tensor Ai Bi Ci X Z → steps_tensor Ai Bi Ci Y Z → X = Y :=
+  by intros _ _ _ s₁ s₂; cases s₁; cases s₂; try {refl}; try {contradiction}
 
-  lemma steps_par_unique_next : Ai ≠ Bi → steps_par Ai Bi X Y → steps_par Ai Bi X Z → Y = Z :=
-  begin
-    intros nAB s₁ s₂,
-    generalize_hyp e₁ : X = X' at s₂,
-    cases s₁;
-    cases s₂;
-    try {refl};
-    try { cases e₁, apply absurd rfl nAB};
-    try {generalize_hyp e₃ : Ai ⅋ Bi = AiBi at e₁, cases e₁ },
-  end
+  lemma steps_tensor_unique_next : Ai ≠ Bi → Bi ≠ Ci → Ai ≠ Ci → steps_tensor Ai Bi Ci X Y → steps_tensor Ai Bi Ci X Z → Y = Z :=
+  by intros _ _ _ s₁ s₂; cases s₁; cases s₂; try {refl}; try {contradiction}
 
-  theorem steps_unique_prev : steps T Δ X Z → steps T Δ Y Z → X = Y :=
+  lemma steps_par_unique_prev : Ai ≠ Bi → Bi ≠ Ci → Ai ≠ Ci → steps_par Ai Bi Ci X Z → steps_par Ai Bi Ci Y Z → X = Y :=
+  by intros _ _ _ s₁ s₂; cases s₁; cases s₂; try {refl}; try {contradiction}
+
+  lemma steps_par_unique_next : Ai ≠ Bi → Bi ≠ Ci → Ai ≠ Ci → steps_par Ai Bi Ci X Y → steps_par Ai Bi Ci X Z → Y = Z :=
+  by intros _ _ _ s₁ s₂; cases s₁; cases s₂; try {refl}; try {contradiction}
+
+  theorem steps_unique_prev : valid_link Δ → steps T Δ X Z → steps T Δ Y Z → X = Y :=
   begin
-    intros s₁ s₂,
+    intros hΔ s₁ s₂,
     cases s₁,
-    case steps.ax_pos : ai { cases s₂, refl },
-    case steps.ax_neg : ai { cases s₂, refl },
-    case steps.cut_pos : Ai { 
-      generalize_hyp e₁ : (~Ai) = nAi at s₂,
-      cases s₂, refl, apply absurd e₁ not_self_dual },
-    case steps.cut_neg : Ai { 
-      generalize_hyp e₁ : (Ai,up) = Aiu at s₂,
-      cases s₂,
-      generalize_hyp e₂ : (~Ai) = nAi at e₁,
-      cases e₁, apply absurd e₂ not_self_dual, refl },
-    case steps.tensor : Ai Bi X Z' t₁ {
-      rcases s₂ with _ | _ | _ | _ | ⟨_,_,_,_,t₂⟩,
+    case steps.ax : A ai ni Bi Ci d₁ {
+      cases s₂ with _ _ _ Di _ d₂,
+      rw dual_unique_prev d₁ d₂ },
+    case steps.cut : A ai ni Bi Ci d₁ {
+      rcases s₂ with _ | ⟨_,_,_,Di,_,d₂⟩,
+      rw dual_unique_prev d₂ d₁
+    },
+    case steps.con : A ai { cases s₂, refl },
+    case steps.tensor : A B ai bi ci X y t₁ {
+      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
       cases T; simp at t₁ t₂;
-      apply steps_tensor_unique_prev _ t₁ t₂,
+      apply steps_tensor_unique_prev _ _ _ t₁ t₂;
       cases hΔ, finish,
       intro e, injection e with e1,
       exact not_self_sub_right_tensor e1,
@@ -248,7 +254,7 @@ section
       exact not_self_sub_right_tensor e1,
     },
     case steps.par : A B ai bi ci X y p₁ {
-      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
+      rcases s₂ with _ | _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
       cases T; simp at p₁ p₂;
       apply steps_par_unique_prev _ _ _ p₁ p₂;
       cases hΔ, finish,
@@ -275,8 +281,9 @@ section
       rcases s₂ with _ | ⟨_,_,_,Di,_,d₂⟩,
       rw dual_unique_next d₂ d₁
     },
+    case steps.con : A ai { cases s₂, refl },
     case steps.tensor : A B ai bi ci X y t₁ {
-      rcases s₂ with _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
+      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,t₂⟩,
       cases T; simp at t₁ t₂;
       apply steps_tensor_unique_next _ _ _ t₁ t₂;
       cases hΔ, finish,
@@ -291,7 +298,7 @@ section
       exact not_self_sub_right_tensor e1,
     },
     case steps.par : A B ai bi ci X y p₁ {
-      rcases s₂ with _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
+      rcases s₂ with _ | _ | _ | _ | ⟨_,_,_,_,_,_,_,p₂⟩,
       cases T; simp at p₁ p₂;
       apply steps_par_unique_next _ _ _ p₁ p₂;
       cases hΔ, finish,
@@ -322,7 +329,8 @@ section
     intros s, cases s,
     case steps.cut : A i j Ai Bi u { cases u; constructor, },
     case steps.tensor : A B i j k Ci u { cases T; cases u; constructor },
-    case steps.par : A B i j k Ci u { cases T; cases u; constructor }
+    case steps.par : A B i j k Ci u { cases T; cases u; constructor },
+    case steps.con : { constructor }
   end
 
   lemma con_of_steps_down :
@@ -340,7 +348,8 @@ section
     intros s, cases s,
     case steps.cut : A i j Ai Bi u { cases u; constructor, },
     case steps.tensor : A B i j k Ci u { cases T; cases u; constructor },
-    case steps.par : A B i j k Ci u { cases T; cases u; constructor }
+    case steps.par : A B i j k Ci u { cases T; cases u; constructor },
+    case steps.con : { constructor }
   end
 
   lemma mem_ps_of_steps_prev {ps : proof_structure} {d : dir} :
@@ -364,7 +373,7 @@ end
 section
   variable {ps : proof_structure}
   variable {S : switching}
-  variables {X Y Z : FormO × dir}
+  variables {X Y Z : Form_occ × dir}
   variables {n m : ℕ}
 
   theorem link_unique_of_steps_prev {Δ₁ Δ₂} :
@@ -388,20 +397,20 @@ section
   def trip.rcons {Δ} : Δ ∈ ps.links → trip ps S n X Y → steps (S Δ) Δ Y Z → trip ps S n.succ X Z :=
   begin
     revert X Y Z,
-    apply nat.strong_induction_on n,
-    intros n ih,
-    rintros X Y Z hΔ tXY sYZ,
-    cases tXY,
-    case trip.single : Ai d hA { 
-      apply trip.cons hΔ sYZ,
-      cases Z with Ci d', simp,
+    induction n,
+    case nat.zero : {
+      rintros X Y Z hΔ ⟨Ai,d,hA⟩ s,
+      apply trip.cons hΔ s,
+      cases Z with Ci d',
       apply trip.single,
-      apply mem_ps_of_steps_next hΔ sYZ,
+      apply mem_ps_of_steps_next hΔ s,
     },
-    case trip.cons : _ W _ Δ' k hΔ' sXW tWY {
-      apply trip.cons hΔ' sXW, simp,
-      apply ih k (lt_add_one k) hΔ tWY sYZ },
-    
+    case nat.succ : n ih {
+      rintros X Y Z hΔ tXY sYZ,
+      cases tXY with _ _ _ _ W _ Δ' _ hΔ' sXW tWY,
+      apply trip.cons hΔ' sXW,
+      apply ih hΔ tWY sYZ,
+    },
   end
 
   def trip.concat : trip ps S n X Y → trip ps S m Y Z → trip ps S (n + m) X Z :=
